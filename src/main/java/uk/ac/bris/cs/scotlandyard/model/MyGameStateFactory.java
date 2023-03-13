@@ -8,7 +8,11 @@ import com.google.common.collect.ImmutableSet;
 import uk.ac.bris.cs.scotlandyard.model.Board.GameState;
 import uk.ac.bris.cs.scotlandyard.model.ScotlandYard.Factory;
 
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * cw-model
@@ -20,8 +24,8 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		private GameSetup setup;
 		private ImmutableSet<Piece> remaining;
 		private ImmutableList<LogEntry> log;
-		private Player mrX;
-		private ImmutableList<Player> detectives;
+		private final Player mrX;
+		private final ImmutableList<Player> detectives;
 		private ImmutableSet<Move> moves;
 		private ImmutableSet<Piece> winner;
 
@@ -49,7 +53,9 @@ public final class MyGameStateFactory implements Factory<GameState> {
 						throw new IllegalArgumentException("Duplicate detectives!");
 					}
 				}
-				if (detectives.get(i).has(ScotlandYard.Ticket.SECRET)) throw new IllegalArgumentException("Detective has secret ticket!");
+				if (detectives.get(i).has(ScotlandYard.Ticket.DOUBLE)) throw new IllegalArgumentException("Detective has a double ticket!");
+				if (detectives.get(i).has(ScotlandYard.Ticket.SECRET)) throw new IllegalArgumentException("Detective has a secret ticket!");
+
 			}
 
 			if (detectives.contains(null)) throw new NullPointerException("Some detectives are null!");
@@ -68,12 +74,18 @@ public final class MyGameStateFactory implements Factory<GameState> {
 			return setup;
 		}
 
+
+		//work in progress
 		@Nonnull
 		@Override
 		public ImmutableSet<Piece> getPlayers() {
-			ImmutableSet players = new ImmutableSet.Builder<Player>()
-					.add(mrX)
-					.addAll(detectives)
+
+			ImmutableSet<Piece> players = new ImmutableSet.Builder<Piece>()
+					.add(mrX.piece())
+					//.addAll(detectives
+//							.stream()
+//							.map( (d) -> d.piece()))
+
 					.build();
 			return players;
 		}
@@ -81,21 +93,37 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		@Nonnull
 		@Override
 		public Optional<Integer> getDetectiveLocation(Piece.Detective detective) {
-
-			//if (detectives.stream().anyMatch(detective));
-			// perhaps there is a better way than using a for loop?
+			// can this be done without a loop?
 			boolean found = false;
-			for (int i = 0; i < detectives.size(); i++){
-				found = found || detectives.get(i).equals(detective);
+			for (int i = 0; i < detectives.size(); i++) {
+				if (detectives.get(i).piece().equals(detective)) return Optional.of(detectives.get(i).location());
 			}
-			if (found) return Optional.of(detective.ordinal());
 			return Optional.empty();
 		}
 
 		@Nonnull
 		@Override
 		public Optional<TicketBoard> getPlayerTickets(Piece piece) {
+			ImmutableList<Player> players = new ImmutableList.Builder<Player>()
+					.addAll(detectives)
+					.add(mrX)
+					.build();
+
+			TicketBoard t;
+			for (int i = 0; i < players.size(); i++) {
+				if (players.get(i).piece().equals(piece)) {
+					int finalI = i;
+					t = new TicketBoard() {
+						@Override
+						public int getCount(@Nonnull ScotlandYard.Ticket ticket) {
+							return players.get(finalI).tickets().get(ticket);
+						}
+					};
+					return Optional.of(t);
+				}
+			}
 			return Optional.empty();
+
 		}
 
 		@Nonnull
