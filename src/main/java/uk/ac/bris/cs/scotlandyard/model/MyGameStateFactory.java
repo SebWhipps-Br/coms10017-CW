@@ -8,10 +8,8 @@ import com.google.common.collect.ImmutableSet;
 import uk.ac.bris.cs.scotlandyard.model.Board.GameState;
 import uk.ac.bris.cs.scotlandyard.model.ScotlandYard.Factory;
 
-import java.util.ArrayList;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -38,8 +36,9 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		{
 			//checking state creation
 			//probably sensible to put these into private methods to clear this up
-
+			if (setup.graph.nodes().isEmpty()) throw new IllegalArgumentException("Graph is empty!");
 			if (setup.moves.isEmpty()) throw new IllegalArgumentException("Moves is empty!");
+			//mrX checks
 			if (mrX == null) throw new NullPointerException("MrX is null!");
 			//detective checks
 			if (detectives == null) throw new NullPointerException("detectives is null!");
@@ -55,9 +54,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
 				}
 				if (detectives.get(i).has(ScotlandYard.Ticket.DOUBLE)) throw new IllegalArgumentException("Detective has a double ticket!");
 				if (detectives.get(i).has(ScotlandYard.Ticket.SECRET)) throw new IllegalArgumentException("Detective has a secret ticket!");
-
 			}
-
 			if (detectives.contains(null)) throw new NullPointerException("Some detectives are null!");
 
 
@@ -79,13 +76,10 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		@Nonnull
 		@Override
 		public ImmutableSet<Piece> getPlayers() {
-
+			ImmutableList<Piece> p = ImmutableList.copyOf(detectives.stream().map(d -> d.piece()).collect(Collectors.toList()));
 			ImmutableSet<Piece> players = new ImmutableSet.Builder<Piece>()
 					.add(mrX.piece())
-					//.addAll(detectives
-//							.stream()
-//							.map( (d) -> d.piece()))
-
+					.addAll(p)
 					.build();
 			return players;
 		}
@@ -105,20 +99,14 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		@Override
 		public Optional<TicketBoard> getPlayerTickets(Piece piece) {
 			ImmutableList<Player> players = new ImmutableList.Builder<Player>()
-					.addAll(detectives)
 					.add(mrX)
+					.addAll(detectives)
 					.build();
 
 			TicketBoard t;
-			for (int i = 0; i < players.size(); i++) {
-				if (players.get(i).piece().equals(piece)) {
-					int finalI = i;
-					t = new TicketBoard() {
-						@Override
-						public int getCount(@Nonnull ScotlandYard.Ticket ticket) {
-							return players.get(finalI).tickets().get(ticket);
-						}
-					};
+			for (Player player : players) {
+				if (player.piece().equals(piece)) {
+					t = ticket -> player.tickets().get(ticket);
 					return Optional.of(t);
 				}
 			}
@@ -135,7 +123,8 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		@Nonnull
 		@Override
 		public ImmutableSet<Piece> getWinner() {
-			return null;
+			//to Implement
+			return ImmutableSet.of();
 		}
 
 		@Nonnull
