@@ -48,7 +48,6 @@ public final class MyGameStateFactory implements Factory<GameState> {
 			for (int i = 0; i < detectives.size(); i++) {
 				for (int j = 0; j < detectives.size(); j++){
 					if ((i != j) && (detectives.get(i).location() == detectives.get(j).location()) ) {
-						System.out.println("asdf");
 						throw new IllegalArgumentException("Duplicate detectives!");
 					}
 				}
@@ -63,6 +62,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
 			this.log = log;
 			this.mrX = mrX;
 			this.detectives = detectives;
+			//this.moves = makeSingleMoves(setup, detectives, p, source);
 		}
 
 		@Nonnull
@@ -111,7 +111,6 @@ public final class MyGameStateFactory implements Factory<GameState> {
 				}
 			}
 			return Optional.empty();
-
 		}
 
 		@Nonnull
@@ -130,7 +129,33 @@ public final class MyGameStateFactory implements Factory<GameState> {
 		@Nonnull
 		@Override
 		public ImmutableSet<Move> getAvailableMoves() {
+//			for (Player p : detectives) {
+//
+//			}
+			//ImmutableSet<Move> moves = new ImmutableSet.Builder<Move>()
+			//		.addAll(makeSingleMoves(setup, detectives, , ))
+
 			return null;
+		}
+
+		private static Set<Move.SingleMove> makeSingleMoves(GameSetup setup, List<Player> detectives, Player player, int source) {
+			Set<Move.SingleMove> singleMoves = new HashSet<>();
+			for(int destination : setup.graph.adjacentNodes(source)) {
+				if (!(detectives.stream().anyMatch(d -> d.location() == source))) {
+					for (ScotlandYard.Transport t : setup.graph.edgeValueOrDefault(source, destination, ImmutableSet.of())) {
+						if (player.has(t.requiredTicket())) {
+							if (player.has(ScotlandYard.Ticket.SECRET)){
+								singleMoves.add(new Move.SingleMove(player.piece(), source, t.requiredTicket(), 0));
+
+							} else {
+								singleMoves.add(new Move.SingleMove(player.piece(), source, t.requiredTicket(), destination));
+							}
+						}
+					}
+				}
+
+			}
+			return singleMoves;
 		}
 
 		@Nonnull
