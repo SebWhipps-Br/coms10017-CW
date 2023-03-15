@@ -83,6 +83,8 @@ public final class MyGameStateFactory implements Factory<GameState> {
             moveBuilder.addAll(makeSingleMoves(setup, detectives, mrX, mrX.location()));
             moveBuilder.addAll(makeDoubleMoves(setup, detectives, mrX, mrX.location()));
             moves = moveBuilder.build();
+
+            this.winner = calculateWinner();
         }
 
         private static Set<Move.SingleMove> makeSingleMoves(GameSetup setup, List<Player> detectives, Player player, int source) {
@@ -189,6 +191,10 @@ public final class MyGameStateFactory implements Factory<GameState> {
         @Nonnull
         @Override
         public ImmutableSet<Piece> getWinner() {
+            return winner;
+        }
+
+        private ImmutableSet<Piece> calculateWinner() {
             // detective win case 1, detectives finish a move on the same station as Mr X
             if (detectives.stream().anyMatch(detective -> detective.location() == mrX.location())) {
                 return detectives.stream().map(Player::piece).collect(ImmutableSet.toImmutableSet());
@@ -292,8 +298,8 @@ public final class MyGameStateFactory implements Factory<GameState> {
         private ImmutableSet<Piece> calculateNewRemaining(boolean isRound1, ImmutableSet<Piece> current, Piece without) {
             if (isRound1) {
                 return ImmutableSet.<Piece>builder()
-                        .addAll(detectives.stream().map(Player::piece).toList())
-                        .build(); //refresh the remaining to all the players except MrX
+                        .addAll(getPlayers())
+                        .build();
             }
 
             if (current.isEmpty()) {
@@ -302,9 +308,6 @@ public final class MyGameStateFactory implements Factory<GameState> {
                         .build(); //refresh the remaining to all the players, next round
             }
 
-            if (current.equals(ImmutableSet.of(without))) {
-                return ImmutableSet.of(mrX.piece());
-            }
             return Sets.difference(remaining, ImmutableSet.of(without)).immutableCopy();
         }
 
