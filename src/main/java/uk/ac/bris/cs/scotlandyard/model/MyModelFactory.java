@@ -36,15 +36,28 @@ public final class MyModelFactory implements Factory<Model> {
 
 			@Override
 			public void registerObserver(@Nonnull Observer observer) {
-				if (observerSet.contains(observer)) throw new IllegalArgumentException("Cannot register the same observer twice!");
-				observerSet = new ImmutableSet.Builder<Observer>()
-						.addAll(observerSet)
-						.add(observer)
-						.build();
+				if (observerSet != null) {
+					if (observerSet.contains(observer)) {
+						throw new IllegalArgumentException("Cannot register the same observer twice!");
+					}
+					observerSet = new ImmutableSet.Builder<Observer>()
+							.addAll(observerSet)
+							.add(observer)
+							.build();
+				} else {
+					observerSet = new ImmutableSet.Builder<Observer>()
+							.add(observer)
+							.build();
+				}
+
 			}
 
 			@Override
 			public void unregisterObserver(@Nonnull Observer observer) {
+				if (observer == null) throw new NullPointerException("Observer is null!");
+
+				if (observerSet == null) throw new IllegalArgumentException("ObserverSet empty!");
+
 				boolean found = false;
 				for (Observer o : observerSet){
 					if (observer.equals(o)){
