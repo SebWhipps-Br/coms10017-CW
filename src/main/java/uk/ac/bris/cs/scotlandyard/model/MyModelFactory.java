@@ -19,15 +19,19 @@ public final class MyModelFactory implements Factory<Model> {
 	                                      Player mrX,
 	                                      ImmutableList<Player> detectives) {
 
-
-		new Model(){
-			ImmutableSet<Observer> observerSet;
+		return new Model(){
+			private ImmutableSet<Observer> observerSet;
+			Board.GameState gameState;
 
 			@Nonnull
 			@Override
 			public Board getCurrentBoard() {
-				//return new Board.GameState(){}
-				return null;
+				//I think this is how it should work?!
+				if (gameState == null) {
+					MyGameStateFactory gsf = new MyGameStateFactory();
+					this.gameState = gsf.build(setup,mrX,detectives);
+				}
+				return gameState;
 			}
 
 			@Override
@@ -57,10 +61,8 @@ public final class MyModelFactory implements Factory<Model> {
 
 			@Override
 			public void chooseMove(@Nonnull Move move) {
-
+				gameState.advance(move);
 			}
 		};
-		// TODO
-		throw new RuntimeException("Implement me!");
 	}
 }
