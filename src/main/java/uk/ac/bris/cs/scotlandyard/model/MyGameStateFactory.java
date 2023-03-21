@@ -81,8 +81,12 @@ public final class MyGameStateFactory implements Factory<GameState> {
                 moveBuilder.addAll(makeSingleMoves(setup, detectives, detective, detective.location()));
             }
             moveBuilder.addAll(makeSingleMoves(setup, detectives, mrX, mrX.location()));
-            moveBuilder.addAll(makeDoubleMoves(setup, detectives, mrX, mrX.location()));
+            if (log.size() < setup.moves.size() - 1) { // double moves are only available if there are at least 2 moves left
+                moveBuilder.addAll(makeDoubleMoves(setup, detectives, mrX, mrX.location()));
+            }
             moves = moveBuilder.build();
+
+            skipDetectivesWhoCantMove();
 
             this.winner = calculateWinner();
         }
@@ -109,6 +113,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
             if (!player.has(ScotlandYard.Ticket.DOUBLE)) {
                 return Set.of();
             }
+
 
             Set<Move.DoubleMove> doubleMoves = new HashSet<>();
             for (int destination : setup.graph.adjacentNodes(source)) {
@@ -239,20 +244,24 @@ public final class MyGameStateFactory implements Factory<GameState> {
                         LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket);
                         ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
                         Player newMrX = mrX.use(move.ticket).at(move.destination);
-                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(log.isEmpty(), remaining, move.commencedBy());
+                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy());
                         return new MyGameState(setup, newRemaining, newLog, newMrX, detectives);
                     }
 
                     @Override
                     public GameState visit(Move.DoubleMove move) {
-                        Move move1 = new Move.SingleMove(move.commencedBy(), move.source(), move.ticket1, move.destination1);
-                        Move move2 = new Move.SingleMove(move.commencedBy(), move.destination1, move.ticket2, move.destination2);
+                        boolean revealMove1 = setup.moves.get(log.size());
+                        LogEntry moveLog = revealMove1 ? LogEntry.reveal(move.ticket1, move.destination1) : LogEntry.hidden(move.ticket1);
+                        ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
+                        Player newMrX = mrX.use(move.ticket1).at(move.destination1);
 
-                        GameState withoutDoubleCard = new MyGameState(setup, remaining, log, mrX.use(ScotlandYard.Ticket.DOUBLE), detectives);
-
-                        GameState state1 = withoutDoubleCard.advance(move1);
-                        return state1.advance(move2);
-
+                        var state1 = new MyGameState(setup, remaining, newLog, newMrX, detectives);
+                        boolean revealMove2 = setup.moves.get(state1.log.size());
+                        LogEntry moveLog2 = revealMove2 ? LogEntry.reveal(move.ticket2, move.destination2) : LogEntry.hidden(move.ticket2);
+                        ImmutableList<LogEntry> newLog2 = ImmutableList.<LogEntry>builder().addAll(state1.log).add(moveLog2).build();
+                        ImmutableSet<Piece> newRemaining2 = calculateNewRemaining(state1.remaining, move.commencedBy());
+                        Player newMrX2 = state1.mrX.use(move.ticket2).use(ScotlandYard.Ticket.DOUBLE).at(move.destination2);
+                        return new MyGameState(setup, newRemaining2, newLog2, newMrX2, detectives);
                     }
                 });
             } else {
@@ -267,7 +276,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
 
                         matchingPlayer = matchingPlayer.at(move.destination).use(move.ticket);
                         Player newMrX = mrX.give(move.ticket);
-                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(false, remaining, move.commencedBy());
+                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy());
                         ImmutableList.Builder<Player> newDetectivesBuilder = new ImmutableList.Builder<>();
                         for (Player detective : detectives) {
                             if (detective.piece().equals(move.commencedBy())) {
@@ -287,25 +296,29 @@ public final class MyGameStateFactory implements Factory<GameState> {
             }
         }
 
+        private void skipDetectivesWhoCantMove() {
+            for (Player detective : detectives) {
+                if (detective.tickets().isEmpty() || moves.stream().filter(move -> move.commencedBy().equals(detective.piece())).findAny().isEmpty()) {
+                    remaining = Sets.difference(remaining, ImmutableSet.of(detective.piece())).immutableCopy();
+                }
+            }
+            if (remaining.isEmpty()) remaining = ImmutableSet.of(mrX.piece());
+        }
+
         /**
          * Calculates the new set for {@link MyGameState#remaining}, removing an element or refreshing the set based on the following criteria:
          *
-         * @param isRound1 If the just played action was in round 1. This is a special case as Mr X gets one free turn at the start of the game before the detectives
-         * @param current  The current set of {@link MyGameState#remaining}
-         * @param without  The piece that just played who should be removed from the set
+         * @param current The current set of {@link MyGameState#remaining}
+         * @param without The piece that just played who should be removed from the set
          * @return The new set
          */
-        private ImmutableSet<Piece> calculateNewRemaining(boolean isRound1, ImmutableSet<Piece> current, Piece without) {
-            if (isRound1) {
-                return ImmutableSet.<Piece>builder()
-                        .addAll(getPlayers())
-                        .build();
+        private ImmutableSet<Piece> calculateNewRemaining(ImmutableSet<Piece> current, Piece without) {
+            if (current.equals(Set.of(mrX.piece()))) {
+                return detectives.stream().map(Player::piece).collect(ImmutableSet.toImmutableSet()); //refresh the remaining to all the detectives
             }
 
             if (current.isEmpty()) {
-                return ImmutableSet.<Piece>builder()
-                        .addAll(getPlayers())
-                        .build(); //refresh the remaining to all the players, next round
+                return ImmutableSet.of(mrX.piece()); //refresh the remaining to just Mr X
             }
 
             return Sets.difference(remaining, ImmutableSet.of(without)).immutableCopy();
