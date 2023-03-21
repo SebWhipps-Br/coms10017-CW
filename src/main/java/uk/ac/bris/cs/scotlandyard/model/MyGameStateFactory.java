@@ -253,12 +253,12 @@ public final class MyGameStateFactory implements Factory<GameState> {
 
         @Nonnull
         @Override
-        public GameState advance(Move move) {
+        public MyGameState advance(Move move) {
             if (!moves.contains(move)) throw new IllegalArgumentException("Illegal move: " + move);
             if (move.commencedBy().isMrX()) {
                 return move.accept(new Move.Visitor<>() {
                     @Override
-                    public GameState visit(Move.SingleMove move) {
+                    public MyGameState visit(Move.SingleMove move) {
                         boolean revealMove = setup.moves.get(log.size());
                         LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket);
                         ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
@@ -268,25 +268,19 @@ public final class MyGameStateFactory implements Factory<GameState> {
                     }
 
                     @Override
-                    public GameState visit(Move.DoubleMove move) {
-                        boolean revealMove1 = setup.moves.get(log.size());
-                        LogEntry moveLog = revealMove1 ? LogEntry.reveal(move.ticket1, move.destination1) : LogEntry.hidden(move.ticket1);
-                        ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
-                        Player newMrX = mrX.use(move.ticket1).at(move.destination1);
+                    public MyGameState visit(Move.DoubleMove move) {
+                        var move1 = new Move.SingleMove(move.commencedBy(), move.source(), move.ticket1, move.destination1);
+                        var move2 = new Move.SingleMove(move.commencedBy(), move.destination1, move.ticket2, move.destination2);
+                        var newState = advance(move1).advance(move2);
 
-                        var state1 = new MyGameState(setup, remaining, newLog, newMrX, detectives);
-                        boolean revealMove2 = setup.moves.get(state1.log.size());
-                        LogEntry moveLog2 = revealMove2 ? LogEntry.reveal(move.ticket2, move.destination2) : LogEntry.hidden(move.ticket2);
-                        ImmutableList<LogEntry> newLog2 = ImmutableList.<LogEntry>builder().addAll(state1.log).add(moveLog2).build();
-                        ImmutableSet<Piece> newRemaining2 = calculateNewRemaining(state1.remaining, move.commencedBy());
-                        Player newMrX2 = state1.mrX.use(move.ticket2).use(ScotlandYard.Ticket.DOUBLE).at(move.destination2);
-                        return new MyGameState(setup, newRemaining2, newLog2, newMrX2, detectives);
+                        var newMrX = newState.mrX.use(ScotlandYard.Ticket.DOUBLE);
+                        return new MyGameState(setup, newState.remaining, newState.log, newMrX, newState.detectives);
                     }
                 });
             } else {
                 return move.accept(new Move.Visitor<>() {
                     @Override
-                    public GameState visit(Move.SingleMove move) {
+                    public MyGameState visit(Move.SingleMove move) {
                         Player matchingPlayer = detectives
                                 .stream()
                                 .filter(p -> p.piece().equals(move.commencedBy()))
@@ -308,13 +302,19 @@ public final class MyGameStateFactory implements Factory<GameState> {
                     }
 
                     @Override
-                    public GameState visit(Move.DoubleMove move) {
+                    public MyGameState visit(Move.DoubleMove move) {
                         throw new IllegalStateException("Only Mr X can do double moves!");
                     }
                 });
             }
         }
 
+        /**
+         * Updates {@link MyGameState#remaining} to remove any detectives who can't move.
+         * This should be done at the start of every move.
+         *
+         * @implNote Because of how the turns work, we can't use {@link MyGameState#calculateNewRemaining(ImmutableSet, Piece)} here. This creates a bit of mess with very similar empty set checks, but I don't think it's too bad
+         */
         private void skipDetectivesWhoCantMove() {
             for (Player detective : detectives) {
                 if (detective.tickets().isEmpty() || moves.stream().filter(move -> move.commencedBy().equals(detective.piece())).findAny().isEmpty()) {
@@ -325,21 +325,24 @@ public final class MyGameStateFactory implements Factory<GameState> {
         }
 
         /**
-         * Calculates the new set for {@link MyGameState#remaining}, removing an element or refreshing the set based on the following criteria:
+         * Calculates the new set for {@link MyGameState#remaining}, removing an element or refreshing the set.
          *
          * @param current The current set of {@link MyGameState#remaining}
          * @param without The piece that just played who should be removed from the set
          * @return The new set
          */
         private ImmutableSet<Piece> calculateNewRemaining(ImmutableSet<Piece> current, Piece without) {
+            // At the start of the round, Mr X is the only one who can move. after he's gone, then any of the detectives can move
             if (current.equals(Set.of(mrX.piece()))) {
                 return detectives.stream().map(Player::piece).collect(ImmutableSet.toImmutableSet()); //refresh the remaining to all the detectives
             }
 
+            // If the current set is empty, then we've just removed the last detective, and we should move to the next round, with Mr X taking the first move
             if (current.isEmpty()) {
                 return ImmutableSet.of(mrX.piece()); //refresh the remaining to just Mr X
             }
 
+            // Otherwise, we're just removing the piece that just moved
             return Sets.difference(remaining, ImmutableSet.of(without)).immutableCopy();
         }
 
