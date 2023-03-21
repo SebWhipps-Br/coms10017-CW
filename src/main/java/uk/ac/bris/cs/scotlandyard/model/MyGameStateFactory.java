@@ -99,10 +99,11 @@ public final class MyGameStateFactory implements Factory<GameState> {
                         if (player.has(t.requiredTicket())) {
                             singleMoves.add(new Move.SingleMove(player.piece(), source, t.requiredTicket(), destination));
                         }
+                        if (player.has(ScotlandYard.Ticket.SECRET)) {
+                            singleMoves.add(new Move.SingleMove(player.piece(), source, ScotlandYard.Ticket.SECRET, destination));
+                        }
                     }
-                    if (player.has(ScotlandYard.Ticket.SECRET)) {
-                        // TODO secret tickets
-                    }
+
                 }
 
             }
@@ -113,29 +114,47 @@ public final class MyGameStateFactory implements Factory<GameState> {
             if (!player.has(ScotlandYard.Ticket.DOUBLE)) {
                 return Set.of();
             }
-
-
             Set<Move.DoubleMove> doubleMoves = new HashSet<>();
             for (int destination : setup.graph.adjacentNodes(source)) {
                 if (detectives.stream().anyMatch(detective -> detective.location() == destination)) {
-                    continue;
+                    continue; // can't move to a location occupied by a detective
                 }
                 for (ScotlandYard.Transport t1 : setup.graph.edgeValueOrDefault(source, destination, ImmutableSet.of())) {
-                    if (!player.has(t1.requiredTicket())) {
-                        continue;
+                    if (!player.has(t1.requiredTicket()) && !player.has(ScotlandYard.Ticket.SECRET)) {
+                        continue;  // short circuit if neither ticket is available, slight optimisation
                     }
                     for (int destination2 : setup.graph.adjacentNodes(destination)) {
-                        if (detectives.stream().anyMatch(d -> d.location() == destination)) {
-                            continue;
+                        if (detectives.stream().anyMatch(d -> d.location() == destination2)) {
+                            continue; // can't move to a location occupied by a detective
                         }
                         for (ScotlandYard.Transport t2 : setup.graph.edgeValueOrDefault(destination, destination2, ImmutableSet.of())) {
-                            if (!player.has(t2.requiredTicket())) {
-                                continue;
-                            }
-                            doubleMoves.add(new Move.DoubleMove(player.piece(), source, t1.requiredTicket(), destination, t2.requiredTicket(), destination2));
+                            doubleMoves.addAll(makeDoubleMoveCombinations(player, source, t1.requiredTicket(), destination, t2.requiredTicket(), destination2));
                         }
                     }
                 }
+            }
+            return doubleMoves;
+        }
+
+        private static Set<Move.DoubleMove> makeDoubleMoveCombinations(Player player, int source, ScotlandYard.Ticket ticket1, int destination, ScotlandYard.Ticket ticket2, int destination2) {
+            Set<Move.DoubleMove> doubleMoves = new HashSet<>();
+
+            if (ticket1 == ticket2) { // special case if both tickets are the same
+                if (player.hasAtLeast(ticket1, 2)) {
+                    doubleMoves.add(new Move.DoubleMove(player.piece(), source, ticket1, destination, ticket2, destination2));
+                }
+            } else if (player.has(ticket1) && player.has(ticket2)) {
+                doubleMoves.add(new Move.DoubleMove(player.piece(), source, ticket1, destination, ticket2, destination2));
+            }
+
+            if (player.has(ticket1) && player.has(ScotlandYard.Ticket.SECRET)) {
+                doubleMoves.add(new Move.DoubleMove(player.piece(), source, ticket1, destination, ScotlandYard.Ticket.SECRET, destination2));
+            }
+            if (player.has(ScotlandYard.Ticket.SECRET) && player.has(ticket2)) {
+                doubleMoves.add(new Move.DoubleMove(player.piece(), source, ScotlandYard.Ticket.SECRET, destination, ticket2, destination2));
+            }
+            if (player.hasAtLeast(ScotlandYard.Ticket.SECRET, 2)) {
+                doubleMoves.add(new Move.DoubleMove(player.piece(), source, ScotlandYard.Ticket.SECRET, destination, ScotlandYard.Ticket.SECRET, destination2));
             }
             return doubleMoves;
         }
