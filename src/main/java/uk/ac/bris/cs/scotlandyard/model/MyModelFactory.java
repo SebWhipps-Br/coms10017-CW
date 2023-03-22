@@ -77,12 +77,12 @@ public final class MyModelFactory implements Factory<Model> {
 			@Override
 			public void chooseMove(@Nonnull Move move) {
 				getCurrentBoard();
-				gameState.advance(move);
+				gameState = gameState.advance(move);
 				Observer.Event event;
 				if (gameState.getWinner().isEmpty()){
-					event = Observer.Event.GAME_OVER;
-				} else {
 					event = Observer.Event.MOVE_MADE;
+				} else {
+					event = Observer.Event.GAME_OVER;
 				}
 				for (Observer observer : observerSet){
 					observer.onModelChanged(getCurrentBoard(), event);
