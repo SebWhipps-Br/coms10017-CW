@@ -31,7 +31,7 @@ public final class MyModelFactory implements Factory<Model> {
 					MyGameStateFactory gsf = new MyGameStateFactory();
 					this.gameState = gsf.build(setup,mrX,detectives);
 				}
-				return gameState;
+				return this.gameState;
 			}
 
 			@Override
@@ -55,9 +55,7 @@ public final class MyModelFactory implements Factory<Model> {
 			@Override
 			public void unregisterObserver(@Nonnull Observer observer) {
 				if (observer == null) throw new NullPointerException("Observer is null!");
-
 				if (observerSet == null) throw new IllegalArgumentException("ObserverSet empty!");
-
 				boolean found = false;
 				for (Observer o : observerSet){
 					if (observer.equals(o)){
@@ -78,7 +76,17 @@ public final class MyModelFactory implements Factory<Model> {
 
 			@Override
 			public void chooseMove(@Nonnull Move move) {
+				getCurrentBoard();
 				gameState.advance(move);
+				Observer.Event event;
+				if (gameState.getWinner().isEmpty()){
+					event = Observer.Event.GAME_OVER;
+				} else {
+					event = Observer.Event.MOVE_MADE;
+				}
+				for (Observer observer : observerSet){
+					observer.onModelChanged(getCurrentBoard(), event);
+				}
 			}
 		};
 	}
