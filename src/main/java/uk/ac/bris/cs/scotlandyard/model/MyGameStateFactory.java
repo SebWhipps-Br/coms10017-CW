@@ -33,11 +33,11 @@ public final class MyGameStateFactory implements Factory<GameState> {
 
         private final Player mrX;
         private final ImmutableList<Player> detectives;
-        private GameSetup setup;
+        private final GameSetup setup;
+        private final ImmutableList<LogEntry> log;
+        private final ImmutableSet<Move> moves;
+        private final ImmutableSet<Piece> winner;
         private ImmutableSet<Piece> remaining;
-        private ImmutableList<LogEntry> log;
-        private ImmutableSet<Move> moves;
-        private ImmutableSet<Piece> winner;
 
         private MyGameState(
                 @Nonnull final GameSetup setup,
@@ -139,11 +139,8 @@ public final class MyGameStateFactory implements Factory<GameState> {
         private static Set<Move.DoubleMove> makeDoubleMoveCombinations(Player player, int source, ScotlandYard.Ticket ticket1, int destination, ScotlandYard.Ticket ticket2, int destination2) {
             Set<Move.DoubleMove> doubleMoves = new HashSet<>();
 
-            if (ticket1 == ticket2) { // special case if both tickets are the same
-                if (player.hasAtLeast(ticket1, 2)) {
-                    doubleMoves.add(new Move.DoubleMove(player.piece(), source, ticket1, destination, ticket2, destination2));
-                }
-            } else if (player.has(ticket1) && player.has(ticket2)) {
+            if ((ticket1 == ticket2 && player.hasAtLeast(ticket1, 2))  // special case if both tickets are the same
+                    || (ticket1 != ticket2 && player.has(ticket1) && player.has(ticket2))) {
                 doubleMoves.add(new Move.DoubleMove(player.piece(), source, ticket1, destination, ticket2, destination2));
             }
 
@@ -242,7 +239,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
         @Nonnull
         @Override
         public ImmutableSet<Move> getAvailableMoves() {
-            if (!getWinner().isEmpty()) {
+            if (!getWinner().isEmpty()) { // game is over, so no moves are available
                 return ImmutableSet.of();
             }
             return moves
@@ -256,57 +253,87 @@ public final class MyGameStateFactory implements Factory<GameState> {
         public MyGameState advance(Move move) {
             if (!moves.contains(move)) throw new IllegalArgumentException("Illegal move: " + move);
             if (move.commencedBy().isMrX()) {
-                return move.accept(new Move.Visitor<>() {
-                    @Override
-                    public MyGameState visit(Move.SingleMove move) {
-                        boolean revealMove = setup.moves.get(log.size());
-                        LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket);
-                        ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
-                        Player newMrX = mrX.use(move.ticket).at(move.destination);
-                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy());
-                        return new MyGameState(setup, newRemaining, newLog, newMrX, detectives);
-                    }
-
-                    @Override
-                    public MyGameState visit(Move.DoubleMove move) {
-                        var move1 = new Move.SingleMove(move.commencedBy(), move.source(), move.ticket1, move.destination1);
-                        var move2 = new Move.SingleMove(move.commencedBy(), move.destination1, move.ticket2, move.destination2);
-                        var newState = advance(move1).advance(move2);
-
-                        var newMrX = newState.mrX.use(ScotlandYard.Ticket.DOUBLE);
-                        return new MyGameState(setup, newState.remaining, newState.log, newMrX, newState.detectives);
-                    }
-                });
+                return visitMrXMove(move);
             } else {
-                return move.accept(new Move.Visitor<>() {
-                    @Override
-                    public MyGameState visit(Move.SingleMove move) {
-                        Player matchingPlayer = detectives
-                                .stream()
-                                .filter(p -> p.piece().equals(move.commencedBy()))
-                                .findFirst()
-                                .orElseThrow(() -> new IllegalStateException("No player for move " + move));
-
-                        matchingPlayer = matchingPlayer.at(move.destination).use(move.ticket);
-                        Player newMrX = mrX.give(move.ticket);
-                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy());
-                        ImmutableList.Builder<Player> newDetectivesBuilder = new ImmutableList.Builder<>();
-                        for (Player detective : detectives) {
-                            if (detective.piece().equals(move.commencedBy())) {
-                                newDetectivesBuilder.add(matchingPlayer);
-                            } else {
-                                newDetectivesBuilder.add(detective);
-                            }
-                        }
-                        return new MyGameState(setup, newRemaining, log, newMrX, newDetectivesBuilder.build());
-                    }
-
-                    @Override
-                    public MyGameState visit(Move.DoubleMove move) {
-                        throw new IllegalStateException("Only Mr X can do double moves!");
-                    }
-                });
+                return visitDetectiveMove(move);
             }
+        }
+
+        private MyGameState visitMrXMove(Move move) {
+            return move.accept(new Move.Visitor<>() {
+                @Override
+                public MyGameState visit(Move.SingleMove move) {
+                    boolean revealMove = setup.moves.get(log.size()); // whether Mr X should reveal his move
+                    LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket); // create log entry
+                    ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build(); // add log entry to log
+                    Player newMrX = mrX.use(move.ticket).at(move.destination); // update Mr X's location and tickets
+                    ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy()); // update remaining players
+                    return new MyGameState(setup, newRemaining, newLog, newMrX, detectives);
+                }
+
+                @Override
+                public MyGameState visit(Move.DoubleMove move) {
+                        /*
+                         Double Moves are basically just 2 single moves, so we can use the SingleMove visitor
+                         This requires a slight change to the types, returning MyGameState instead of GameState
+                         but the interface hasn't changed so this is fine
+                        */
+                    var move1 = new Move.SingleMove(move.commencedBy(), move.source(), move.ticket1, move.destination1);
+                    var move2 = new Move.SingleMove(move.commencedBy(), move.destination1, move.ticket2, move.destination2);
+                    var newState = advance(move1).advance(move2);
+
+                    var newMrX = newState.mrX.use(ScotlandYard.Ticket.DOUBLE); //also use the double ticket
+                    return new MyGameState(setup, newState.remaining, newState.log, newMrX, newState.detectives);
+                }
+            });
+        }
+
+        private MyGameState visitDetectiveMove(Move move) {
+            return move.accept(new Move.Visitor<>() {
+                @Override
+                public MyGameState visit(Move.SingleMove move) {
+                    Player matchingPlayer = getPlayerForPiece(move.commencedBy())
+                            .orElseThrow(() -> new IllegalStateException("No player for move " + move));
+                    // figure out what player actually made the move
+
+                    matchingPlayer = matchingPlayer.at(move.destination).use(move.ticket); // update player's location and tickets
+
+                    Player newMrX = mrX.give(move.ticket); // Mr X gets the used ticket back
+                    ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy()); // update remaining players
+
+                    // this is a bit messy, but since the Player class is immutable and the detectives list is immutable,
+                    // we have to do this to update the detectives list with the updated player object.
+                    // The easiest way of doing this is just a loop which compares the pieces of the players
+                    ImmutableList.Builder<Player> newDetectivesBuilder = new ImmutableList.Builder<>();
+                    for (Player detective : detectives) {
+                        if (detective.piece().equals(move.commencedBy())) {
+                            newDetectivesBuilder.add(matchingPlayer);
+                        } else {
+                            newDetectivesBuilder.add(detective);
+                        }
+                    }
+
+                    return new MyGameState(setup, newRemaining, log, newMrX, newDetectivesBuilder.build());
+                }
+
+                @Override
+                public MyGameState visit(Move.DoubleMove move) {
+                    throw new IllegalStateException("Only Mr X can do double moves!");
+                }
+            });
+        }
+
+        /**
+         * Finds the Player who "owns" a given piece
+         *
+         * @param piece the piece to find the owner of
+         * @return the owner of the piece if it exists, otherwise an empty optional
+         */
+        private Optional<Player> getPlayerForPiece(Piece piece) {
+            if (piece.isMrX()) {
+                return Optional.of(mrX);
+            }
+            return detectives.stream().filter(detective -> detective.piece().equals(piece)).findFirst();
         }
 
         /**
