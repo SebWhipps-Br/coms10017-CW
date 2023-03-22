@@ -259,21 +259,26 @@ public final class MyGameStateFactory implements Factory<GameState> {
                 return move.accept(new Move.Visitor<>() {
                     @Override
                     public MyGameState visit(Move.SingleMove move) {
-                        boolean revealMove = setup.moves.get(log.size());
-                        LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket);
-                        ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build();
-                        Player newMrX = mrX.use(move.ticket).at(move.destination);
-                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy());
+                        boolean revealMove = setup.moves.get(log.size()); // whether Mr X should reveal his move
+                        LogEntry moveLog = revealMove ? LogEntry.reveal(move.ticket, move.destination) : LogEntry.hidden(move.ticket); // create log entry
+                        ImmutableList<LogEntry> newLog = ImmutableList.<LogEntry>builder().addAll(log).add(moveLog).build(); // add log entry to log
+                        Player newMrX = mrX.use(move.ticket).at(move.destination); // update Mr X's location and tickets
+                        ImmutableSet<Piece> newRemaining = calculateNewRemaining(remaining, move.commencedBy()); // update remaining players
                         return new MyGameState(setup, newRemaining, newLog, newMrX, detectives);
                     }
 
                     @Override
                     public MyGameState visit(Move.DoubleMove move) {
+                        /*
+                         Double Moves are basically just 2 single moves, so we can use the SingleMove visitor
+                         This requires a slight change to the types, returning MyGameState instead of GameState
+                         but the interface hasn't changed so this is fine
+                        */
                         var move1 = new Move.SingleMove(move.commencedBy(), move.source(), move.ticket1, move.destination1);
                         var move2 = new Move.SingleMove(move.commencedBy(), move.destination1, move.ticket2, move.destination2);
                         var newState = advance(move1).advance(move2);
 
-                        var newMrX = newState.mrX.use(ScotlandYard.Ticket.DOUBLE);
+                        var newMrX = newState.mrX.use(ScotlandYard.Ticket.DOUBLE); //also use the double ticket
                         return new MyGameState(setup, newState.remaining, newState.log, newMrX, newState.detectives);
                     }
                 });
