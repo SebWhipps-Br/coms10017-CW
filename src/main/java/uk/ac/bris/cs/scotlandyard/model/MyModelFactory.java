@@ -21,12 +21,12 @@ public final class MyModelFactory implements Factory<Model> {
 
 		return new Model(){
 			private ImmutableSet<Observer> observerSet;
-			Board.GameState gameState;
+			private Board.GameState gameState;
 
 			@Nonnull
 			@Override
 			public Board getCurrentBoard() {
-				//I think this is how it should work?!
+				// ensures gameState is initialised
 				if (gameState == null) {
 					MyGameStateFactory gsf = new MyGameStateFactory();
 					this.gameState = gsf.build(setup,mrX,detectives);
@@ -37,14 +37,18 @@ public final class MyModelFactory implements Factory<Model> {
 			@Override
 			public void registerObserver(@Nonnull Observer observer) {
 				if (observerSet != null) {
+					//prevents duplicate observers
 					if (observerSet.contains(observer)) {
 						throw new IllegalArgumentException("Cannot register the same observer twice!");
+					} else {
+						// replaces old observerSet with new one containing the new observer and the old set
+						observerSet = new ImmutableSet.Builder<Observer>()
+								.addAll(observerSet)
+								.add(observer)
+								.build();
 					}
-					observerSet = new ImmutableSet.Builder<Observer>()
-							.addAll(observerSet)
-							.add(observer)
-							.build();
 				} else {
+					// Empty case: creates new observerSet
 					observerSet = new ImmutableSet.Builder<Observer>()
 							.add(observer)
 							.build();
@@ -60,6 +64,7 @@ public final class MyModelFactory implements Factory<Model> {
 				for (Observer o : observerSet){
 					if (observer.equals(o)){
 						found = true;
+						// Replaces observerSet with itself, without the specified observer
 						observerSet = new ImmutableSet.Builder<Observer>()
 								.addAll(observerSet.stream().filter(x -> x != o).collect(Collectors.toList()))
 								.build();
@@ -77,12 +82,12 @@ public final class MyModelFactory implements Factory<Model> {
 			@Override
 			public void chooseMove(@Nonnull Move move) {
 				getCurrentBoard();
-				gameState = gameState.advance(move);
+				gameState = gameState.advance(move); 				// In case the gameState hasn't been initialised
 				Observer.Event event;
 				if (gameState.getWinner().isEmpty()){
 					event = Observer.Event.MOVE_MADE;
 				} else {
-					event = Observer.Event.GAME_OVER;
+					event = Observer.Event.GAME_OVER; // Game is finished when there is a winner
 				}
 				for (Observer observer : observerSet){
 					observer.onModelChanged(getCurrentBoard(), event);
