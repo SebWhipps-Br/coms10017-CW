@@ -81,16 +81,13 @@ public final class MyModelFactory implements Factory<Model> {
 
 			@Override
 			public void chooseMove(@Nonnull Move move) {
-				// In case the gameState hasn't been initialised
-				//# Have a look at the gameState variable in this, to be cleaned up
 				getCurrentBoard();
-				gameState = gameState.advance(move);
+				gameState = gameState.advance(move); 				// In case the gameState hasn't been initialised
 				Observer.Event event;
-				// Game is finished when there is a winner
 				if (gameState.getWinner().isEmpty()){
 					event = Observer.Event.MOVE_MADE;
 				} else {
-					event = Observer.Event.GAME_OVER;
+					event = Observer.Event.GAME_OVER; // Game is finished when there is a winner
 				}
 				for (Observer observer : observerSet){
 					observer.onModelChanged(getCurrentBoard(), event);
