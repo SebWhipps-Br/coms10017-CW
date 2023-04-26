@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * cw-model
@@ -29,7 +30,7 @@ public final class MyGameStateFactory implements Factory<GameState> {
 
     }
 
-    private final class MyGameState implements GameState {
+    private static final class MyGameState implements GameState {
 
         private final Player mrX;
         private final ImmutableList<Player> detectives;
@@ -92,22 +93,21 @@ public final class MyGameStateFactory implements Factory<GameState> {
         }
 
         private static Set<Move.SingleMove> makeSingleMoves(GameSetup setup, List<Player> detectives, Player player, int source) {
-            Set<Move.SingleMove> singleMoves = new HashSet<>();
-            for (int destination : setup.graph.adjacentNodes(source)) {
-                if (detectives.stream().noneMatch(d -> d.location() == destination)) {
-                    for (ScotlandYard.Transport t : setup.graph.edgeValueOrDefault(source, destination, ImmutableSet.of())) {
-                        if (player.has(t.requiredTicket())) {
-                            singleMoves.add(new Move.SingleMove(player.piece(), source, t.requiredTicket(), destination));
-                        }
-                        if (player.has(ScotlandYard.Ticket.SECRET)) {
-                            singleMoves.add(new Move.SingleMove(player.piece(), source, ScotlandYard.Ticket.SECRET, destination));
-                        }
-                    }
-
-                }
-
-            }
-            return singleMoves;
+            return setup.graph.adjacentNodes(source)
+                    .stream()
+                    .filter(destination -> detectives.stream().noneMatch(d -> d.location() == destination)) // can't move to a detective's location
+                    .flatMap(destination -> {
+                        //noinspection DataFlowIssue will never be null as we passed a default value
+                        return setup.graph.edgeValueOrDefault(source, destination, ImmutableSet.of())
+                                .stream()
+                                .flatMap(transport -> {
+                                    var normalMove = new Move.SingleMove(player.piece(), source, transport.requiredTicket(), destination);
+                                    var secretMove = new Move.SingleMove(player.piece(), source, ScotlandYard.Ticket.SECRET, destination);
+                                    return Stream.of(normalMove, secretMove)
+                                            .filter(m -> player.has(m.ticket));
+                                });
+                    })
+                    .collect(Collectors.toSet());
         }
 
         private static Set<Move.DoubleMove> makeDoubleMoves(GameSetup setup, List<Player> detectives, Player player, int source) {
@@ -166,19 +166,19 @@ public final class MyGameStateFactory implements Factory<GameState> {
         @Nonnull
         @Override
         public ImmutableSet<Piece> getPlayers() {
-            ImmutableList<Piece> p = ImmutableList.copyOf(detectives.stream().map(d -> d.piece()).collect(Collectors.toList()));
-            ImmutableSet<Piece> players = new ImmutableSet.Builder<Piece>()
+            ImmutableList<Piece> p = ImmutableList.copyOf(detectives.stream()
+                    .map(Player::piece)
+                    .collect(Collectors.toList()));
+
+            return new ImmutableSet.Builder<Piece>()
                     .add(mrX.piece())
                     .addAll(p)
                     .build();
-            return players;
         }
 
         @Nonnull
         @Override
         public Optional<Integer> getDetectiveLocation(Piece.Detective detective) {
-            // can this be done without a loop?
-            boolean found = false;
             for (int i = 0; i < detectives.size(); i++) {
                 if (detectives.get(i).piece().equals(detective)) return Optional.of(detectives.get(i).location());
             }
